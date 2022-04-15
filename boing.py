@@ -7,85 +7,115 @@ import numpy as np
 from matplotlib.animation import FuncAnimation
 from scipy import signal
 
+# %%
+# Sine wave inscribed in a circle
+plt.style.use('default')
+fig, ax = plt.subplots()
+ax.set_aspect(1)
+t = np.linspace(0, 2*np.pi, 1000)
+x = np.cos(t)
+y = np.sin(t) * np.sin(20*t) * 0.5 * (1 + signal.square(t))
+ax.add_patch(mpl.patches.Circle((0,0), 1, fc='none', ec='0.5', ls='--'))
+plt.plot(x, y)
+# plt.savefig('circle-sine.png')
+plt.show()
+
+# %%
+# Spherical spring
+
+# Figure setup for animation
 plt.style.use('dark_background')
 fig, ax = plt.subplots()
-#fig.patch.set_alpha(0)
-fig.set_size_inches(4, 4)
+fig.set_size_inches(3, 3)
 plt.subplots_adjust(0, 0, 1, 1)
-#ax.patch.set_alpha(0)
 ax.set_axis_off()
 ax.set_xlim(-1.1, 1.1)
 ax.set_ylim(-1.1, 1.1)
 ax.set_aspect(1)
 
-
-ncycles = 20
-nsamp = 200
+# Use a list of Lines2D objects to draw curve segments with different alpha,
+# to simulate phosphor decay on a CRT.
+ncycles = 3
+nsamp = 2000
 t = np.linspace(0, 2*np.pi, nsamp)
 
+# Set up the Lines2D objects
 l = []
 for i in range(ncycles):
-    # Cheap phosphor decay simulation
-    alpha = 0.1 + (0.8 * i/ncycles)
-    zorder = 2+0.1*i/ncycles
+    alpha = 0.5 ** (ncycles - i - 1)
+    zorder = 2 + 0.1 * i/ncycles
     l.extend(ax.plot([], [], color='#3fcfff', alpha=alpha, zorder=zorder, animated=True))
 
+def get_data(th, fnum):
+    # The actual math: two quadrature sine waves (`circ` and `fill`)
+    # along with a quadrature sine wave each for y-axis and z-axis rotation.
+    # Also a square wave to cut off the "retrace" to avoid a crowded mess
+    # when the sphere envelope sine wave goes into its negative half-cycle.
 
-def get_data1(th):
-    bend = 1.000
-    f0 = .2001
-    f = 20*f0*bend
-    fy = .005*f0
-    yrot = np.exp(1j*fy*th)
-    fill = np.exp(1j*f*th)
-    fill.real *= yrot.imag
-    saw = signal.sawtooth(f0*th, .5) * yrot.real
-    sq = .5 + .5*signal.square(f0*th)
-    z = .3*fill*sq + .7*saw
-    fz = .002*f0
-    zro = .2
-    zrot = np.exp(1j*fz*th)
-    z = zrot*(zro + (1-zro)*z)
-    return (z.real, z.imag)
-
-def get_data(th):
-    bend = 1.000
-    f0 = .2001
-    f = 20*f0*bend
-    # Y-axis "rotation"
-    fy = .004*f0
-    yrot = np.exp(1j*fy*th)
-    # "Fill" waveform
-    fill = np.exp(1j*f*th)
-    fill.real *= yrot.imag
-    # Outer circle
+    # Fundamental frequency (excluding slow rotations)
+    f0 = 1.00
+    # Frequency of "fill" waveform
+    f = 20 * f0
+    # Y-axis rotation
+    fy = 0.005
+    # Use discrete rotation steps, so the figure closes during each frame
+    yrot = np.exp(1j*2*np.pi * fy * fnum)
+    # Outer circle of sphere to create an envelope
     circ = np.exp(1j*f0*th)
+    # Modulate x-axis to get y-axis rotation
     circ.real *= yrot.real
+    # "Fill" waveform, modulated by sphere envelope
+    fill = np.exp(1j*f*th) * circ.imag
+    # Modulate x-axis to get y-axis rotation
+    fill.real *= yrot.imag
+    # Replace the above line with the following to see a failed attempt
+    # fill.real *= yrot.real
     # Offset of square wave
-    sqo = .5
+    sqo = 0.5
     # Square wave to cut off "retrace"
-    sq = sqo+(1-sqo)*signal.square(f0*th)
-    z = fill * circ.imag * sq
-    #z += fill.conjugate() * circ.imag * (1-sq)
-    z += circ.real
-    fz = .002*f0
-    zro = 0.4
-    zrot = np.exp(1j*fz*th)
-    z = zrot*(zro + (1-zro)*z)
+    sq = sqo + (1 - sqo) * signal.square(f0*th)
+    z = fill * sq + circ.real
+    # Offset for z-axis rotation, to orbit instead of spinning in place
+    zroff = 0.4
+    # Z-axis rotation
+    fz = 0.005
+    # Use discrete rotation steps, so the figure closes during each frame
+    zrot = np.exp(1j*2*np.pi * fz * fnum)
+    z = zrot*(zroff + (1 - zroff) * z)
     return (z.real, z.imag)
 
-def update(data):
+def init_data():
+    # Pre-fill "negative" time, so looping the animation looks a bit better
     for i in range(ncycles):
-        offset = 2*np.pi*(data*(ncycles//2)+i)
-        x, y = get_data(t+offset)
+        fnum = i - ncycles + 1
+        x, y = get_data(t + 2*np.pi * fnum, fnum)
         l[i].set_data(x, y)
     return l
 
-#anim = FuncAnimation(fig, update, 250, interval=50, blit=True)
+def update(data):
+    if data == 0:
+        # Initialization is a little tricky and gets its own function
+        return init_data()
+    # Shift existing data points to lower alpha segments
+    for i in range(ncycles - 1):
+        l[i].set_data(l[i+1].get_data())
+    offset = 2*np.pi*(data)
+    x, y = get_data(t+offset, data)
+    l[-1].set_data(x, y)
+    return l
+
+# anim = FuncAnimation(fig, update, 200, interval=50, blit=True)
 anim = FuncAnimation(fig, update, interval=50, blit=True)
+# anim.save('boing-opt.gif', dpi=100, extra_args=['-filter_complex','split[a][b];[a] palettegen=max_colors=16 [p];[b][p] paletteuse'])
+# anim.save('boing.gif')
+# anim.save('boing.mp4')
 plt.show()
-#plt.close()
-#anim.save('boing.webp', codec='webp')
-#from IPython.display import HTML
-#HTML(anim.to_jshtml())
+
+# Comment out the plt.show() and uncomment the following to embed the
+# animation in a Jupyter notebook
+
+# plt.close()
+# from IPython.display import HTML
+# HTML(anim.to_jshtml())
+
 # %%

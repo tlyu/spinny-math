@@ -1,10 +1,9 @@
 # %%
-#%matplotlib widget
+# %matplotlib widget
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 
-from matplotlib.animation import FuncAnimation
 from scipy import signal
 
 # %%
@@ -23,34 +22,18 @@ plt.show()
 # %%
 # Spherical spring
 
-# Figure setup for animation
-plt.style.use('dark_background')
-fig, ax = plt.subplots()
-fig.set_size_inches(3, 3)
-plt.subplots_adjust(0, 0, 1, 1)
-ax.set_axis_off()
-ax.set_xlim(-1.1, 1.1)
-ax.set_ylim(-1.1, 1.1)
-ax.set_aspect(1)
+from vectorscope import VectorScope
 
-# Use a list of Lines2D objects to draw curve segments with different alpha,
-# to simulate phosphor decay on a CRT.
-ncycles = 3
 nsamp = 2000
 t = np.linspace(0, 2*np.pi, nsamp)
 
-# Set up the Lines2D objects
-l = []
-for i in range(ncycles):
-    alpha = 0.5 ** (ncycles - i - 1)
-    zorder = 2 + 0.1 * i/ncycles
-    l.extend(ax.plot([], [], color='#3fcfff', alpha=alpha, zorder=zorder, animated=True))
-
-def get_data(th, fnum):
+def get_data(fnum):
     # The actual math: two quadrature sine waves (`circ` and `fill`)
     # along with a quadrature sine wave each for y-axis and z-axis rotation.
     # Also a square wave to cut off the "retrace" to avoid a crowded mess
     # when the sphere envelope sine wave goes into its negative half-cycle.
+
+    th = t + 2*np.pi * fnum
 
     # Fundamental frequency (excluding slow rotations)
     f0 = 1.00
@@ -84,28 +67,7 @@ def get_data(th, fnum):
     z = zrot*(zroff + (1 - zroff) * z)
     return (z.real, z.imag)
 
-def init_data():
-    # Pre-fill "negative" time, so looping the animation looks a bit better
-    for i in range(ncycles):
-        fnum = i - ncycles + 1
-        x, y = get_data(t + 2*np.pi * fnum, fnum)
-        l[i].set_data(x, y)
-    return l
-
-def update(data):
-    if data == 0:
-        # Initialization is a little tricky and gets its own function
-        return init_data()
-    # Shift existing data points to lower alpha segments
-    for i in range(ncycles - 1):
-        l[i].set_data(l[i+1].get_data())
-    offset = 2*np.pi*(data)
-    x, y = get_data(t+offset, data)
-    l[-1].set_data(x, y)
-    return l
-
-# anim = FuncAnimation(fig, update, 200, interval=50, blit=True)
-anim = FuncAnimation(fig, update, interval=50, blit=True)
+anim = VectorScope(get_data)
 # anim.save('boing-opt.gif', dpi=100, extra_args=['-filter_complex','split[a][b];[a] palettegen=max_colors=16 [p];[b][p] paletteuse'])
 # anim.save('boing.gif')
 # anim.save('boing.mp4')
